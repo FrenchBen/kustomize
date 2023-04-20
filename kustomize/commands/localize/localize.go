@@ -5,10 +5,13 @@ package localize
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	oci "github.com/fluxcd/pkg/oci/client"
+	"github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/spf13/cobra"
 	lclzr "sigs.k8s.io/kustomize/api/krusty/localizer"
 	"sigs.k8s.io/kustomize/kyaml/errors"
@@ -26,7 +29,6 @@ type arguments struct {
 
 type theFlags struct {
 	scope    string
-	artifact bool
 	creds    string
 	provider provider.SourceOCIProvider
 }
@@ -34,6 +36,7 @@ type theFlags struct {
 // NewCmdLocalize returns a new localize command.
 func NewCmdLocalize(fs filesys.FileSystem) *cobra.Command {
 	var f theFlags
+	f.provider.Set("generic")
 	cmd := &cobra.Command{
 		Use:   "localize [target [destination]]",
 		Short: "[Alpha] Creates localized copy of target kustomization root at destination",
@@ -62,17 +65,17 @@ kustomize localize /home/path/scope/target --scope /home/path/scope
 # Localize remote at set destination relative to working directory
 kustomize localize https://github.com/kubernetes-sigs/kustomize//api/krusty/testdata/localize/simple?ref=v4.5.7 path/non-existing-dir
 
-# Localize remote OCI manifest
-kustomize localize --artifact ghcr.io/my-user/oci-manifest:latest
+# Localize remote OCI manifest (if no folder is provided, the current folder is used)
+kustomize localize oci://ghcr.io/my-user/oci-manifest:latest oci-manifest
 `,
 		SilenceUsage: true,
 		Args:         cobra.MaximumNArgs(numArgs),
 		RunE: func(cmd *cobra.Command, rawArgs []string) error {
 			args := matchArgs(rawArgs)
-			// if it's an artifact download it
 			var dst string
 			var err error
-			if f.artifact {
+			// if it's an artifact download it
+			if strings.HasPrefix(args.target, "oci://") {
 				err = pullArtifact(args, f)
 			} else {
 				dst, err = lclzr.Run(fs, args.target, f.scope, args.dest)
@@ -93,9 +96,8 @@ kustomize localize --artifact ghcr.io/my-user/oci-manifest:latest
 Cannot specify for remote targets, as scope is by default the containing repo.
 If not specified for local target, scope defaults to target.
 `)
-	cmd.Flags().BoolVar(&f.artifact, "artifact", false, "Pull remote OCI artifact and unpack locally")
 	cmd.Flags().StringVar(&f.creds, "creds", "", "credentials for OCI registry in the format <username>[:<password>] if --provider is generic")
-	cmd.Flags().StringVar(&f.provider, "provider", "generic", "the OCI provider name, available options are: (generic, aws, azure, gcp) (default generic)")
+	cmd.Flags().Var(&f.provider, "provider", f.provider.Description())
 	return cmd
 }
 
@@ -128,26 +130,30 @@ func pullArtifact(args arguments, localizeFlags theFlags) error {
 
 	ociClient := oci.NewLocalClient()
 
-	// if localizeFlags.provider.String() == sourcev1.GenericOCIProvider && localizeFlags.creds != "" {
-	// 	log.Println("logging in to registry with credentials")
-	// 	if err := ociClient.LoginWithCredentials(localizeFlags.creds); err != nil {
-	// 		return fmt.Errorf("could not login with credentials: %w", err)
-	// 	}
-	// }
+	log.Printf("Collected provider: %s and creds: %s", localizeFlags.provider.String(), localizeFlags.creds)
 
-	// if localizeFlags.provider.String() != sourcev1.GenericOCIProvider {
-	// 	log.Println("logging in to registry with provider credentials")
-	// 	ociProvider, err := localizeFlags.provider.ToOCIProvider()
-	// 	if err != nil {
-	// 		return fmt.Errorf("provider not supported: %w", err)
-	// 	}
+	if localizeFlags.provider.String() == v1beta2.GenericOCIProvider && localizeFlags.creds != "" {
+		log.Println("logging in to registry with credentials")
+		if err := ociClient.LoginWithCredentials(localizeFlags.creds); err != nil {
+			return fmt.Errorf("could not login with credentials: %w", err)
+		}
+	}
 
-	// 	if err := ociClient.LoginWithProvider(ctx, ociURL, ociProvider); err != nil {
-	// 		return fmt.Errorf("error during login with provider: %w", err)
-	// 	}
-	// }
+	if localizeFlags.provider.String() != v1beta2.GenericOCIProvider {
+		log.Println("logging in to registry with provider credentials")
+		ociProvider, err := localizeFlags.provider.ToOCIProvider()
+		if err != nil {
+			return fmt.Errorf("provider not supported: %w", err)
+		}
 
-	meta, err := ociClient.Pull(ctx, args.target, output)
+		if err := ociClient.LoginWithProvider(ctx, ociURL, ociProvider); err != nil {
+			return fmt.Errorf("error during login with provider: %w", err)
+		}
+	}
+
+	log.Printf("pulling artifact from %s", ociURL)
+
+	meta, err := ociClient.Pull(ctx, ociURL, output)
 	if err != nil {
 		return err
 	}
@@ -156,4 +162,5 @@ func pullArtifact(args arguments, localizeFlags theFlags) error {
 	log.Printf("revision %s", meta.Revision)
 	log.Printf("digest %s", meta.Digest)
 	log.Printf("artifact content extracted to %s", output)
+	return nil
 }
