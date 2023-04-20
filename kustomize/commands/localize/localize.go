@@ -4,12 +4,17 @@
 package localize
 
 import (
+	"context"
 	"log"
+	"time"
 
+	oci "github.com/fluxcd/pkg/oci/client"
 	"github.com/spf13/cobra"
 	lclzr "sigs.k8s.io/kustomize/api/krusty/localizer"
 	"sigs.k8s.io/kustomize/kyaml/errors"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
+
+	provider "sigs.k8s.io/kustomize/oci"
 )
 
 const numArgs = 2
@@ -19,14 +24,16 @@ type arguments struct {
 	dest   string
 }
 
-type flags struct {
+type theFlags struct {
 	scope    string
 	artifact bool
+	creds    string
+	provider provider.SourceOCIProvider
 }
 
 // NewCmdLocalize returns a new localize command.
 func NewCmdLocalize(fs filesys.FileSystem) *cobra.Command {
-	var f flags
+	var f theFlags
 	cmd := &cobra.Command{
 		Use:   "localize [target [destination]]",
 		Short: "[Alpha] Creates localized copy of target kustomization root at destination",
@@ -66,12 +73,12 @@ kustomize localize --artifact ghcr.io/my-user/oci-manifest:latest
 			var dst string
 			var err error
 			if f.artifact {
-
+				err = pullArtifact(args, f)
 			} else {
 				dst, err = lclzr.Run(fs, args.target, f.scope, args.dest)
-				if err != nil {
-					return errors.Wrap(err)
-				}
+			}
+			if err != nil {
+				return errors.Wrap(err)
 			}
 
 			log.Printf("SUCCESS: localized %q to directory %s\n", args.target, dst)
@@ -87,6 +94,8 @@ Cannot specify for remote targets, as scope is by default the containing repo.
 If not specified for local target, scope defaults to target.
 `)
 	cmd.Flags().BoolVar(&f.artifact, "artifact", false, "Pull remote OCI artifact and unpack locally")
+	cmd.Flags().StringVar(&f.creds, "creds", "", "credentials for OCI registry in the format <username>[:<password>] if --provider is generic")
+	cmd.Flags().StringVar(&f.provider, "provider", "generic", "the OCI provider name, available options are: (generic, aws, azure, gcp) (default generic)")
 	return cmd
 }
 
@@ -104,4 +113,47 @@ func matchArgs(rawArgs []string) arguments {
 		args.target = filesys.SelfDir
 	}
 	return args
+}
+
+func pullArtifact(args arguments, localizeFlags theFlags) error {
+	output := args.dest
+	ociURL, err := oci.ParseArtifactURL(args.target)
+	if err != nil {
+		return err
+	}
+
+	timeout := 5 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ociClient := oci.NewLocalClient()
+
+	// if localizeFlags.provider.String() == sourcev1.GenericOCIProvider && localizeFlags.creds != "" {
+	// 	log.Println("logging in to registry with credentials")
+	// 	if err := ociClient.LoginWithCredentials(localizeFlags.creds); err != nil {
+	// 		return fmt.Errorf("could not login with credentials: %w", err)
+	// 	}
+	// }
+
+	// if localizeFlags.provider.String() != sourcev1.GenericOCIProvider {
+	// 	log.Println("logging in to registry with provider credentials")
+	// 	ociProvider, err := localizeFlags.provider.ToOCIProvider()
+	// 	if err != nil {
+	// 		return fmt.Errorf("provider not supported: %w", err)
+	// 	}
+
+	// 	if err := ociClient.LoginWithProvider(ctx, ociURL, ociProvider); err != nil {
+	// 		return fmt.Errorf("error during login with provider: %w", err)
+	// 	}
+	// }
+
+	meta, err := ociClient.Pull(ctx, args.target, output)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("source %s", meta.Source)
+	log.Printf("revision %s", meta.Revision)
+	log.Printf("digest %s", meta.Digest)
+	log.Printf("artifact content extracted to %s", output)
 }

@@ -17,6 +17,7 @@ use (
 	./functions/examples/validator-resource-requests/image
 	./kustomize
 	./kyaml
+	./oci
 	./plugin/builtin/annotationstransformer
 	./plugin/builtin/configmapgenerator
 	./plugin/builtin/hashtransformer
