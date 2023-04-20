@@ -20,7 +20,8 @@ type arguments struct {
 }
 
 type flags struct {
-	scope string
+	scope    string
+	artifact bool
 }
 
 // NewCmdLocalize returns a new localize command.
@@ -53,15 +54,26 @@ kustomize localize /home/path/scope/target --scope /home/path/scope
 
 # Localize remote at set destination relative to working directory
 kustomize localize https://github.com/kubernetes-sigs/kustomize//api/krusty/testdata/localize/simple?ref=v4.5.7 path/non-existing-dir
+
+# Localize remote OCI manifest
+kustomize localize --artifact ghcr.io/my-user/oci-manifest:latest
 `,
 		SilenceUsage: true,
 		Args:         cobra.MaximumNArgs(numArgs),
 		RunE: func(cmd *cobra.Command, rawArgs []string) error {
 			args := matchArgs(rawArgs)
-			dst, err := lclzr.Run(fs, args.target, f.scope, args.dest)
-			if err != nil {
-				return errors.Wrap(err)
+			// if it's an artifact download it
+			var dst string
+			var err error
+			if f.artifact {
+
+			} else {
+				dst, err = lclzr.Run(fs, args.target, f.scope, args.dest)
+				if err != nil {
+					return errors.Wrap(err)
+				}
 			}
+
 			log.Printf("SUCCESS: localized %q to directory %s\n", args.target, dst)
 			return nil
 		},
@@ -74,6 +86,7 @@ kustomize localize https://github.com/kubernetes-sigs/kustomize//api/krusty/test
 Cannot specify for remote targets, as scope is by default the containing repo.
 If not specified for local target, scope defaults to target.
 `)
+	cmd.Flags().BoolVar(&f.artifact, "artifact", false, "Pull remote OCI artifact and unpack locally")
 	return cmd
 }
 
