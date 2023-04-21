@@ -77,6 +77,7 @@ kustomize localize oci://ghcr.io/my-user/oci-manifest:latest oci-manifest
 			// if it's an artifact download it
 			if strings.HasPrefix(args.target, "oci://") {
 				err = pullArtifact(args, f)
+				dst = args.dest
 			} else {
 				dst, err = lclzr.Run(fs, args.target, f.scope, args.dest)
 			}
@@ -129,8 +130,6 @@ func pullArtifact(args arguments, localizeFlags theFlags) error {
 	defer cancel()
 
 	ociClient := oci.NewLocalClient()
-
-	log.Printf("Collected provider: %s and creds: %s", localizeFlags.provider.String(), localizeFlags.creds)
 
 	if localizeFlags.provider.String() == v1beta2.GenericOCIProvider && localizeFlags.creds != "" {
 		log.Println("logging in to registry with credentials")
