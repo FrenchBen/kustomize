@@ -8,11 +8,6 @@ import (
 	"github.com/fluxcd/source-controller/api/v1beta2"
 )
 
-const (
-	ociPrefix     = "oci://"
-	pathSeparator = "/" // do not use filepath.Separator, as this is a URL
-)
-
 var supportedSourceOCIProviders = []string{
 	v1beta2.GenericOCIProvider,
 	v1beta2.AmazonOCIProvider,
