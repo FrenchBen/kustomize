@@ -20,10 +20,6 @@ type arguments struct {
 	dest   string
 }
 
-// @TODO
-// Can't use internal package from API outside API folder
-// Need to build something like "krusty/localizer"
-// krusty becomes a shim for what you need
 type theFlags struct {
 	scope    string
 	creds    string

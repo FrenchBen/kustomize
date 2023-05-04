@@ -170,8 +170,6 @@ func TestGenericArtifactPull(t *testing.T) {
 		"deployment.yaml": deployment,
 	}
 	expected, actual, target := loctest.PrepareFs(t, nil, nil)
-	log.Println("target: ", target.String())
-
 	cmd := localize.NewCmdLocalize(actual)
 
 	// Create output buffer
@@ -186,7 +184,6 @@ func TestGenericArtifactPull(t *testing.T) {
 		testOciArtifact,
 		target.Join("dst"),
 	})
-	log.Printf("error is: %v\n\n", err)
 	require.NoError(t, err)
 
 	// Verify that our OCI artifact extract matches the expected "kustomizations" file content
@@ -195,5 +192,4 @@ func TestGenericArtifactPull(t *testing.T) {
 
 	successMsg := fmt.Sprintf("SUCCESS: localized \"%s\" to directory %s", testOciArtifact, target.Join("dst"))
 	require.Contains(t, buffy.String(), successMsg)
-	fmt.Printf("Output: %s", successMsg)
 }
