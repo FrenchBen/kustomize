@@ -109,18 +109,19 @@ func NewOCISpecFromURL(n string) (*OciSpec, error) {
 type Puller func(ociSpec *OciSpec) error
 
 func PullArtifact(ociSpec *OciSpec) error {
-	dir, err := filesys.NewTmpConfirmedDir()
-	if err != nil {
-		return err
+	if ociSpec.Dir.String() == "" {
+		dir, err := filesys.NewTmpConfirmedDir()
+		if err != nil {
+			return err
+		}
+		ociSpec.Dir = dir
 	}
-	ociSpec.Dir = dir
 	timeout := 5 * time.Minute
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	ociClient := fluxClient.NewLocalClient()
-
-	_, err = ociClient.Pull(ctx, ociSpec.image, ociSpec.Dir.String())
+	_, err := ociClient.Pull(ctx, ociSpec.image, ociSpec.Dir.String())
 	if err != nil {
 		return err
 	}
