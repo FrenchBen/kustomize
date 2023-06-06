@@ -46,44 +46,45 @@ func IsOCIManifest(path string) bool {
 //
 // * supplemental data paths
 //
-//	`Load` is used to visit these paths.
+//   `Load` is used to visit these paths.
 //
-//	These paths refer to resources, patches,
-//	data for ConfigMaps and Secrets, etc.
+//   These paths refer to resources, patches,
+//   data for ConfigMaps and Secrets, etc.
 //
-//	The loadRestrictor may disallow certain paths
-//	or classes of paths.
+//   The loadRestrictor may disallow certain paths
+//   or classes of paths.
 //
 // * bases (other kustomizations)
 //
-//	`New` is used to load bases.
+//   `New` is used to load bases.
 //
-//	A base can be either a remote git repo URL, or
-//	a directory specified relative to the current
-//	root. In the former case, the repo is locally
-//	cloned, and the new loader is rooted on a path
-//	in that clone.
+//   A base can be either a remote git repo URL, or
+//   a directory specified relative to the current
+//   root. In the former case, the repo is locally
+//   cloned, and the new loader is rooted on a path
+//   in that clone.
 //
-//	As loaders create new loaders, a root history
-//	is established, and used to disallow:
+//   As loaders create new loaders, a root history
+//   is established, and used to disallow:
 //
-//	- A base that is a repository that, in turn,
-//	  specifies a base repository seen previously
-//	  in the loading stack (a cycle).
+//   - A base that is a repository that, in turn,
+//     specifies a base repository seen previously
+//     in the loading stack (a cycle).
 //
-//	- An overlay depending on a base positioned at
-//	  or above it.  I.e. '../foo' is OK, but '.',
-//	  '..', '../..', etc. are disallowed.  Allowing
-//	  such a base has no advantages and encourages
-//	  cycles, particularly if some future change
-//	  were to introduce globbing to file
-//	  specifications in the kustomization file.
+//   - An overlay depending on a base positioned at
+//     or above it.  I.e. '../foo' is OK, but '.',
+//     '..', '../..', etc. are disallowed.  Allowing
+//     such a base has no advantages and encourages
+//     cycles, particularly if some future change
+//     were to introduce globbing to file
+//     specifications in the kustomization file.
 //
 // These restrictions assure that kustomizations
 // are self-contained and relocatable, and impose
 // some safety when relying on remote kustomizations,
 // e.g. a remotely loaded ConfigMap generator specified
 // to read from /etc/passwd will fail.
+//
 type fileLoader struct {
 	// Loader that spawned this loader.
 	// Used to avoid cycles.
@@ -330,20 +331,20 @@ func newLoaderAtOCIManifest(
 	cleaner := ociSpec.Cleaner(fSys)
 	err := puller(ociSpec)
 	if err != nil {
-		cleaner()
+		_ = cleaner()
 		return nil, err
 	}
 	root, f, err := fSys.CleanedAbs(ociSpec.AbsPath())
 	if err != nil {
-		cleaner()
-		return nil, err
+		_ = cleaner()
+		return nil, fmt.Errorf("[CleanedAbs] error: %w", err)
 	}
 	// We don't know that the path requested in ociSpec
 	// is a directory until we actually clone it and look
 	// inside.  That just happened, hence the error check
 	// is here.
 	if f != "" {
-		cleaner()
+		_ = cleaner()
 		return nil, fmt.Errorf(
 			"'%s' refers to file '%s'; expecting directory",
 			ociSpec.AbsPath(), f)
@@ -351,8 +352,8 @@ func newLoaderAtOCIManifest(
 	// Append the path given for the kustomization manifest
 	root, err = filesys.ConfirmDir(fSys, root.Join(ociSpec.Path))
 	if err != nil {
-		cleaner()
-		return nil, err
+		_ = cleaner()
+		return nil, fmt.Errorf("[ConfirmDir] error: %w", err)
 	}
 
 	return &fileLoader{
